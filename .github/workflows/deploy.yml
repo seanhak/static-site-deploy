@@ -16,7 +16,7 @@ on:
         type: string
         default: eu-north-1
       copyright-name:
-        description: Namnet efter "© <år>" i index.html som ska få aktuellt år (tomt = ingen stämpling)
+        description: Namnet efter "© <år>" i HTML-sidorna i roten (index.html, 404.html …) som ska få aktuellt år (tomt = ingen stämpling)
         required: false
         type: string
         default: ""
@@ -83,16 +83,22 @@ jobs:
           [ -f dist/sitemap.xml ] && sed -i -E "s#<lastmod>[^<]*</lastmod>#<lastmod>$LASTMOD</lastmod>#" dist/sitemap.xml
           [ -f dist/humans.txt ] && sed -i -E "s#^$HUMANS_LABEL: .*#$HUMANS_LABEL: $LASTMOD#" dist/humans.txt
           [ -f dist/.well-known/security.txt ] && sed -i -E "s#^Expires: .*#Expires: $EXPIRES#" dist/.well-known/security.txt
-          # alla sidor i roten (index.html, 404.html …); 404-sidan länkar med rotadresser (/styles.css)
+          # alla sidor i roten (index.html, 404.html …). Bara script.js behöver cache-busting: styles.css bäddas in.
           for f in dist/*.html; do
             [ -f "$f" ] || continue
-            if [ -n "$COPYRIGHT_NAME" ]; then
-              sed -i -E "s#© [0-9]{4} $COPYRIGHT_NAME#© $YEAR $COPYRIGHT_NAME#" "$f"
-            fi
-            # cache-busting: nya adresser till CSS och JS vid varje deploy
-            sed -i -E "s#href=\"(/?)styles\.css\"#href=\"\1styles.css?v=$VERSION\"#; s#src=\"(/?)script\.js\"#src=\"\1script.js?v=$VERSION\"#" "$f"
-            grep -o -E "© [0-9]{4} [^<]*|(styles\.css|script\.js)\?v=[0-9a-f]+" "$f" | sed "s#^#$f: #" || true
+            sed -i -E "s#src=\"(\./|/)?script\.js\"#src=\"\1script.js?v=$VERSION\"#" "$f"
           done
+          # ©-året sätts i Node, så att namnet kan innehålla vilka tecken som helst (punkt, parentes, #)
+          if [ -n "$COPYRIGHT_NAME" ]; then
+            YEAR=$YEAR node -e '
+              const fs=require("fs"), name=process.env.COPYRIGHT_NAME, year=process.env.YEAR;
+              const re=new RegExp("© \\d{4} "+name.replace(/[.*+?^${}()|[\]\\]/g,"\\$&"),"g");
+              for (const n of fs.readdirSync("dist").filter(n=>n.endsWith(".html"))) {
+                const f="dist/"+n, html=fs.readFileSync(f,"utf8");
+                fs.writeFileSync(f, html.replace(re, ()=>"© "+year+" "+name));
+              }'
+          fi
+          grep -o -E "© [0-9]{4} [^<]*|script\.js\?v=[0-9a-f]+" dist/*.html || true
           grep -h -E "lastmod|$HUMANS_LABEL|Expires" dist/sitemap.xml dist/humans.txt dist/.well-known/security.txt 2>/dev/null || true
 
       # Minifieringen tar även bort alla kommentarer
@@ -101,23 +107,23 @@ jobs:
           shopt -s nullglob
           files=(dist/*.js dist/*.css)
           [ ${#files[@]} -gt 0 ] && npx --yes esbuild@0.28.2 "${files[@]}" --minify --outdir=dist --allow-overwrite
-          # CSS:en är liten: bädda in den i HTML:en så att sidan slipper vänta på en extra förfrågan.
-          # Relativa url() i CSS:en (typsnitt, bilder) blir rotadresser, eftersom de annars skulle tolkas
-          # relativt sidans adress, och 404-sidan kan visas på vilken djup adress som helst.
+          # CSS:en är liten: bädda in den i HTML-sidorna i roten så att de slipper vänta på en extra förfrågan.
+          # Sedan raderas styles.css, så deployen stoppas om någon sida fortfarande pekar på den.
           if [ -f dist/styles.css ]; then
-            node -e "
-              const fs=require('fs'), path=require('path');
-              const css=fs.readFileSync('dist/styles.css','utf8').replace(/url\(\s*(['\"]?)(?![a-z]+:|\/|#)([^'\")]+)\1\s*\)/gi, (m,q,u)=>'url('+q+'/'+u+q+')');
-              for (const name of fs.readdirSync('dist').filter(n=>n.endsWith('.html'))) {
-                const f=path.join('dist',name), html=fs.readFileSync(f,'utf8');
-                const out=html.replace(/<link rel=\"stylesheet\" href=\"\/?styles\.css[^\"]*\">/, ()=>'<style>'+css+'</style>');
-                if(out===html && name==='index.html') throw new Error('hittade inte styles.css-länken i index.html');
-                if(out!==html){ fs.writeFileSync(f,out); console.log('inbäddad i '+f); }
+            node -e '
+              const fs=require("fs"), path=require("path"), css=fs.readFileSync("dist/styles.css","utf8");
+              const link=/<link rel="stylesheet" href="\/?styles\.css[^"]*">/;
+              for (const n of fs.readdirSync("dist").filter(n=>n.endsWith(".html"))) {
+                const f=path.join("dist",n), html=fs.readFileSync(f,"utf8"), out=html.replace(link, ()=>"<style>"+css+"</style>");
+                if (out!==html) { fs.writeFileSync(f,out); console.log("inbäddad i "+f); }
               }
-              fs.unlinkSync('dist/styles.css');"
+              fs.unlinkSync("dist/styles.css");
+              const left=fs.readdirSync("dist",{recursive:true}).filter(n=>n.endsWith(".html")&&fs.readFileSync(path.join("dist",n),"utf8").includes("styles.css"));
+              if (left.length) throw new Error("pekar fortfarande på styles.css (skriv länken som <link rel=\"stylesheet\" href=\"styles.css\">): "+left.join(", "));'
           fi
-          find dist -name '*.html' -exec npx --yes html-minifier-terser@7.2.0 \
-            --collapse-whitespace --conservative-collapse --remove-comments -o {} {} \;
+          # alla HTML-filer i ett anrop, på plats
+          npx --yes html-minifier-terser@7.2.0 --input-dir dist --output-dir dist --file-ext html \
+            --collapse-whitespace --conservative-collapse --remove-comments
           if [ -f dist/site.webmanifest ]; then
             node -e "const fs=require('fs'),f='dist/site.webmanifest';fs.writeFileSync(f,JSON.stringify(JSON.parse(fs.readFileSync(f))))"
           fi
