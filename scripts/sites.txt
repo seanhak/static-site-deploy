@@ -1,0 +1,8 @@
+# domän (som besökare använder)   S3-bucket              projekt
+botabra.se                         botabra.se             botabra
+seanhak.com                        seanhak.com            seanhak
+hemlisar.com                       hemlisar.com           hemlisar
+mellandagsrejva.com                mellandagsrejva.com    mellandagsrejva
+www.xn--ll-yia.com                 www.xn--ll-yia.com     lal
+www.xn--4caz.com                   www.xn--4caz.com       na
+www.xn--ndae.com                   www.xn--ndae.com       oo

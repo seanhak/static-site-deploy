@@ -1,0 +1,162 @@
+# Gemensam deploy för de statiska sajterna (botabra.se, seanhak.com, hemlisar.com m.fl.).
+# Anropas från varje sajts egen workflow med `uses: seanhak/static-site-deploy/.github/workflows/deploy.yml@v1`.
+# Koden som checkas ut och OIDC-inloggningen gäller alltid det anropande repot.
+name: Deploy static site
+
+on:
+  workflow_call:
+    inputs:
+      bucket:
+        description: S3-bucket som sajten synkas till
+        required: true
+        type: string
+      aws-region:
+        description: Bucketens region
+        required: false
+        type: string
+        default: eu-north-1
+      copyright-name:
+        description: Namnet efter "© <år>" i index.html som ska få aktuellt år (tomt = ingen stämpling)
+        required: false
+        type: string
+        default: ""
+      humans-date-label:
+        description: Raden i humans.txt som får datumet för senaste commit
+        required: false
+        type: string
+        default: Senast uppdaterad
+    secrets:
+      AWS_ROLE_ARN:
+        required: true
+      CF_API_TOKEN:
+        required: false
+      CF_ZONE_ID:
+        required: false
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      S3_BUCKET: ${{ inputs.bucket }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ inputs.aws-region }}
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      # Vitlista: bara sajtens filtyper kopieras till dist/, så att nya filer i repot (anteckningar,
+      # verktyg, package.json …) aldrig publiceras av misstag. Dotmappar följer inte med, utom .well-known/.
+      - name: Copy site files into dist/
+        run: |
+          rsync -am --include='.well-known/***' --exclude='.*' --exclude='dist/' \
+            --include='*/' \
+            --include='*.html' --include='*.css' --include='*.js' \
+            --include='*.svg' --include='*.png' --include='*.ico' --include='*.jpg' --include='*.webp' --include='*.avif' \
+            --include='*.woff2' --include='*.txt' --include='*.xml' --include='*.webmanifest' \
+            --exclude='*' ./ dist/
+          find dist -type f | sort
+
+      # Datum och versioner som ska följa med varje deploy. Filer som saknas hoppas över.
+      - name: Stamp dates and versions
+        env:
+          COPYRIGHT_NAME: ${{ inputs.copyright-name }}
+          HUMANS_LABEL: ${{ inputs.humans-date-label }}
+        run: |
+          LASTMOD=$(git log -1 --format=%cs)                            # när innehållet senast ändrades
+          YEAR=$(date -u +%Y)
+          EXPIRES=$(date -u -d '+1 year' +%Y-%m-%dT00:00:00.000Z)       # security.txt: högst ett år fram
+          VERSION=$(git rev-parse --short HEAD)
+          [ -f dist/sitemap.xml ] && sed -i -E "s#<lastmod>[^<]*</lastmod>#<lastmod>$LASTMOD</lastmod>#" dist/sitemap.xml
+          [ -f dist/humans.txt ] && sed -i -E "s#^$HUMANS_LABEL: .*#$HUMANS_LABEL: $LASTMOD#" dist/humans.txt
+          [ -f dist/.well-known/security.txt ] && sed -i -E "s#^Expires: .*#Expires: $EXPIRES#" dist/.well-known/security.txt
+          if [ -n "$COPYRIGHT_NAME" ]; then
+            sed -i -E "s#© [0-9]{4} $COPYRIGHT_NAME#© $YEAR $COPYRIGHT_NAME#" dist/index.html
+          fi
+          # cache-busting: nya adresser till CSS och JS vid varje deploy
+          sed -i -E "s#href=\"styles\.css\"#href=\"styles.css?v=$VERSION\"#; s#src=\"script\.js\"#src=\"script.js?v=$VERSION\"#" dist/index.html
+          grep -h -E "lastmod|$HUMANS_LABEL|Expires" dist/sitemap.xml dist/humans.txt dist/.well-known/security.txt 2>/dev/null || true
+          grep -o -E "© [0-9]{4} [^<]*|(styles\.css|script\.js)\?v=[0-9a-f]+" dist/index.html || true
+
+      # Minifieringen tar även bort alla kommentarer
+      - name: Minify
+        run: |
+          shopt -s nullglob
+          files=(dist/*.js dist/*.css)
+          [ ${#files[@]} -gt 0 ] && npx --yes esbuild@0.28.2 "${files[@]}" --minify --outdir=dist --allow-overwrite
+          # CSS:en är liten: bädda in den i HTML:en så att sidan slipper vänta på en extra förfrågan
+          if [ -f dist/styles.css ]; then
+            node -e "
+              const fs=require('fs'), css=fs.readFileSync('dist/styles.css','utf8'), f='dist/index.html';
+              const html=fs.readFileSync(f,'utf8'), out=html.replace(/<link rel=\"stylesheet\" href=\"styles\.css[^\"]*\">/, ()=>'<style>'+css+'</style>');
+              if(out===html) throw new Error('hittade inte styles.css-länken');
+              fs.writeFileSync(f,out); fs.unlinkSync('dist/styles.css');"
+          fi
+          find dist -name '*.html' -exec npx --yes html-minifier-terser@7.2.0 \
+            --collapse-whitespace --conservative-collapse --remove-comments -o {} {} \;
+          if [ -f dist/site.webmanifest ]; then
+            node -e "const fs=require('fs'),f='dist/site.webmanifest';fs.writeFileSync(f,JSON.stringify(JSON.parse(fs.readFileSync(f))))"
+          fi
+
+      # Förlustfri optimering: svgo för SVG, optipng för PNG, jpegoptim för JPG (tar bort metadata).
+      # Varje verktyg körs bara om det finns filer av den typen.
+      - name: Optimize images
+        run: |
+          if find dist -name '*.svg' | grep -q .; then npx --yes svgo@4.1.0 --multipass --recursive --folder dist; fi
+          if find dist -name '*.png' -o -name '*.jpg' | grep -q .; then
+            sudo apt-get install -y --no-install-recommends optipng jpegoptim >/dev/null
+            find dist -name '*.png' -exec optipng -quiet -o5 -strip all {} +
+            find dist -name '*.jpg' -exec jpegoptim --quiet --strip-all {} +
+          fi
+          ls -lR dist
+
+      # Allt synkas först med en dags cache. Sedan laddas filtyperna som behöver något annat upp igen:
+      # HTML kontrolleras alltid mot servern, JS (med ?v=<commit>) och typsnitt cachas i ett år,
+      # och textfiler/manifest får rätt content-type och teckenkodning.
+      - name: Sync static site to S3
+        env:
+          B: s3://${{ inputs.bucket }}
+        run: |
+          aws s3 sync dist $B --delete --cache-control "public, max-age=86400"
+          aws s3 cp dist $B --recursive --exclude "*" --include "*.html" \
+            --cache-control "no-cache" --content-type "text/html; charset=utf-8"
+          aws s3 cp dist $B --recursive --exclude "*" --include "*.js" \
+            --cache-control "public, max-age=31536000, immutable" --content-type "text/javascript; charset=utf-8"
+          aws s3 cp dist $B --recursive --exclude "*" --include "*.woff2" \
+            --cache-control "public, max-age=31536000, immutable" --content-type "font/woff2"
+          aws s3 cp dist $B --recursive --exclude "*" --include "*.txt" \
+            --cache-control "public, max-age=3600" --content-type "text/plain; charset=utf-8"
+          if [ -f dist/site.webmanifest ]; then
+            aws s3 cp dist/site.webmanifest $B/site.webmanifest \
+              --cache-control "public, max-age=86400" --content-type "application/manifest+json"
+          fi
+
+      - name: Purge Cloudflare cache
+        env:
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          CF_ZONE_ID: ${{ secrets.CF_ZONE_ID }}
+        run: |
+          # Utan token/zon hoppas purge över med en varning: sajten är publicerad, men Cloudflare
+          # kan visa den gamla versionen i upp till ett dygn (cache-regelns edge TTL).
+          if [ -z "$CF_API_TOKEN" ] || [ -z "$CF_ZONE_ID" ]; then
+            echo "::warning title=Cloudflare-cachen tömdes inte::CF_API_TOKEN eller CF_ZONE_ID saknas i repots secrets."
+            exit 0
+          fi
+          curl --fail --silent --show-error \
+            -X POST "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/purge_cache" \
+            -H "Authorization: Bearer ${CF_API_TOKEN}" \
+            -H "Content-Type: application/json" \
+            --data '{"purge_everything":true}'
