@@ -134,32 +134,37 @@ jobs:
         run: |
           if find dist -name '*.svg' | grep -q .; then npx --yes svgo@4.1.0 --multipass --recursive --folder dist; fi
           if find dist -name '*.png' -o -name '*.jpg' | grep -q .; then
+            # paketlistan på runnern kan vara inaktuell, och då hittar install inte paketen
+            sudo apt-get update -qq >/dev/null
             sudo apt-get install -y --no-install-recommends optipng jpegoptim >/dev/null
             find dist -name '*.png' -exec optipng -quiet -o5 -strip all {} +
             find dist -name '*.jpg' -exec jpegoptim --quiet --strip-all {} +
           fi
           ls -lR dist
 
-      # Allt synkas först med en dags cache. Sedan laddas filtyperna som behöver något annat upp igen:
-      # HTML kontrolleras alltid mot servern, JS (med ?v=<commit>) och typsnitt cachas i ett år,
-      # och textfiler/manifest får rätt content-type och teckenkodning.
+      # Ordningen spelar roll: JS och typsnitt laddas upp först, så att nya adresser (script.js?v=<commit>)
+      # redan finns när HTML:en som pekar på dem kommer upp. Annars kan en besökare hinna få den gamla
+      # script.js under den nya adressen, och JS cachas i ett år. Sedan övriga filer med en dags cache,
+      # textfiler och manifest med rätt content-type, HTML sist (kontrolleras alltid mot servern), och till
+      # sist tas filer bort som inte längre finns (--size-only: allt annat är redan uppladdat).
       - name: Sync static site to S3
         env:
           B: s3://${{ inputs.bucket }}
         run: |
-          aws s3 sync dist $B --delete --cache-control "public, max-age=86400"
-          aws s3 cp dist $B --recursive --exclude "*" --include "*.html" \
-            --cache-control "no-cache" --content-type "text/html; charset=utf-8"
           aws s3 cp dist $B --recursive --exclude "*" --include "*.js" \
             --cache-control "public, max-age=31536000, immutable" --content-type "text/javascript; charset=utf-8"
           aws s3 cp dist $B --recursive --exclude "*" --include "*.woff2" \
             --cache-control "public, max-age=31536000, immutable" --content-type "font/woff2"
+          aws s3 sync dist $B --exclude "*.html" --exclude "*.js" --exclude "*.woff2" --cache-control "public, max-age=86400"
           aws s3 cp dist $B --recursive --exclude "*" --include "*.txt" \
             --cache-control "public, max-age=3600" --content-type "text/plain; charset=utf-8"
           if [ -f dist/site.webmanifest ]; then
             aws s3 cp dist/site.webmanifest $B/site.webmanifest \
               --cache-control "public, max-age=86400" --content-type "application/manifest+json"
           fi
+          aws s3 cp dist $B --recursive --exclude "*" --include "*.html" \
+            --cache-control "no-cache" --content-type "text/html; charset=utf-8"
+          aws s3 sync dist $B --delete --size-only
 
       - name: Purge Cloudflare cache
         env:
