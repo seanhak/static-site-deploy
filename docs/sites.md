@@ -11,7 +11,7 @@ Gäller alla sajter i `README.md`:s tabell (botabra.se, seanhak.com, hemlisar.co
 - Adresser i meta-taggar, sitemap och liknande är absoluta och använder sajtens kanoniska värd (apex, eller www för IDN-domänerna, se nedan).
 
 ## Lokal förhandsgranskning
-VS Code-tasken "Starta lokal server" (browser-sync på http://localhost:8000, eller nästa lediga port), eller `python3 -m http.server 8000`. `sites.code-workspace` i static-site-deploy öppnar alla sajter i ett fönster.
+VS Code-tasken "Starta lokal server" (browser-sync på http://localhost:8000, eller nästa lediga port), eller `python3 -m http.server 8000`. `/Volumes/SD/git/seanhak/seanhak.code-workspace` öppnar alla repon i ett fönster, med tasks för skripten i static-site-deploy.
 
 ## Infrastruktur (samma för alla)
 - AWS-konto 568395190971. S3-bucket i eu-north-1 med static website hosting, `index.html` som index- och error-dokument.
