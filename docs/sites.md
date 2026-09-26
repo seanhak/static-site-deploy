@@ -11,7 +11,19 @@ Gäller alla sajter i `README.md`:s tabell (botabra.se, seanhak.com, hemlisar.co
 - Adresser i meta-taggar, sitemap och liknande är absoluta och använder sajtens kanoniska värd (apex, eller www för IDN-domänerna, se nedan).
 
 ## Lokal förhandsgranskning
-VS Code-tasken "Starta lokal server" (browser-sync på http://localhost:8000, eller nästa lediga port), eller `python3 -m http.server 8000`. `/Volumes/SD/git/seanhak/seanhak.code-workspace` öppnar alla repon i ett fönster, med tasks för skripten i static-site-deploy.
+VS Code-tasken "Starta lokal server" (browser-sync med CSS-injicering och omladdning), eller `python3 -m http.server <port>`. Varje sajt har en egen fast port så att alla kan köras samtidigt:
+
+| Sajt | Port |
+|---|---|
+| botabra.se | 8001 |
+| seanhak.com | 8002 |
+| hemlisar.com | 8003 |
+| mellandagsrejva.com | 8004 |
+| lål.com | 8005 |
+| ñä.com | 8006 |
+| öø.com | 8007 |
+
+En ny sajt får nästa lediga port, i sin `.vscode/tasks.json` och i tabellen här. `/Volumes/SD/git/seanhak/seanhak.code-workspace` öppnar alla repon i ett fönster, med tasks för skripten i static-site-deploy.
 
 ## Infrastruktur (samma för alla)
 - AWS-konto 568395190971. S3-bucket i eu-north-1 med static website hosting, `index.html` som index- och error-dokument.
