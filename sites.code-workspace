@@ -1,0 +1,40 @@
+{
+  // Alla statiska sajter i ett VS Code-fönster. Sökvägarna är relativa till den här filen,
+  // så repona ska ligga bredvid static-site-deploy (i dag /Volumes/SD/git/seanhak/).
+  // Varje sajts egen task ("Starta lokal server") syns med mappnamnet. browser-sync tar nästa
+  // lediga port om 8000 är upptagen, så flera sajter kan köras samtidigt.
+  "folders": [
+    { "path": ".", "name": "static-site-deploy" },
+    { "path": "../botabra.se" },
+    { "path": "../seanhak.com" },
+    { "path": "../hemlisar.com" },
+    { "path": "../mellandagsrejva.com" },
+    { "path": "../lal.com", "name": "lal.com (lål.com)" },
+    { "path": "../na.com", "name": "na.com (ñä.com)" },
+    { "path": "../oo.com", "name": "oo.com (öø.com)" }
+  ],
+  "tasks": {
+    "version": "2.0.0",
+    "tasks": [
+      {
+        "label": "Kolla alla sajter",
+        "detail": "check-sites.sh: svar via Cloudflare, cache-headers och att S3 är stängd för allt utom Cloudflare",
+        "type": "shell",
+        "command": "${workspaceFolder:static-site-deploy}/scripts/check-sites.sh",
+        "problemMatcher": [],
+        "presentation": { "reveal": "always", "panel": "shared" }
+      },
+      {
+        "label": "Uppdatera bucket policies (Cloudflares IP-spann)",
+        "detail": "update-bucket-policies.sh: visar vad som ändras och frågar först. Kräver aws login.",
+        "type": "shell",
+        "command": "${workspaceFolder:static-site-deploy}/scripts/update-bucket-policies.sh",
+        "problemMatcher": [],
+        "presentation": { "reveal": "always", "panel": "shared", "focus": true }
+      }
+    ]
+  },
+  "settings": {
+    "files.exclude": { "**/dist": true }
+  }
+}

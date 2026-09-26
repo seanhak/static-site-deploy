@@ -62,6 +62,10 @@ git tag -f v1 && git push -f origin v1
 
 Ändringen gäller vid varje sajts nästa deploy. Kör "Run workflow" i en sajts repo för att rulla ut direkt. Vill du testa en ändring först kan en sajt tillfälligt peka på `@main`. Gör ändringar som inte är bakåtkompatibla som `v2`.
 
+## VS Code
+
+Öppna `sites.code-workspace` för att få alla sajter i ett fönster. Repona ska ligga bredvid det här repot, i `/Volumes/SD/git/seanhak/`. Workspacen har tasks för skripten nedan, och varje sajts "Starta lokal server" syns med mappnamnet.
+
 ## Skript
 
 - `scripts/check-sites.sh` kontrollerar alla sajter: svar 200 via Cloudflare, `no-cache` på HTML och att S3 direkt ger 403. Läser bara.
