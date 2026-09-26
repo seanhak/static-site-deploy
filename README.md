@@ -74,4 +74,4 @@ git tag -f v1 && git push -f origin v1
 
 ## Ny sajt
 
-Se någon av sajternas README. Kort sagt: bucket och IAM-roll i AWS, zon i Cloudflare, secrets i repot och namnservrar i Route 53, och sedan en rad i `scripts/sites.txt` och tabellen ovan. Nya GitHub-repon använder "immutable subject" för OIDC. Kontrollera `sub` med `gh api repos/seanhak/<repo>/actions/oidc/customization/sub`.
+Se någon av sajternas README. Kort sagt: bucket och IAM-roll i AWS, zon i Cloudflare, secrets i repot och namnservrar i Route 53, och sedan en rad i `scripts/sites.txt` och tabellen ovan. Tagga bucket, IAM-roll, domän och hosted zone med `project=<projektnamn>` (nyckeln `project` är aktiverad som cost allocation tag, så kostnaderna syns per projekt i Billing). Nya GitHub-repon använder "immutable subject" för OIDC. Kontrollera `sub` med `gh api repos/seanhak/<repo>/actions/oidc/customization/sub`.
