@@ -6,7 +6,7 @@ Gäller alla sajter i `README.md`:s tabell (botabra.se, seanhak.com, hemlisar.co
 - Ren HTML, CSS och JavaScript, utan ramverk och utan build-steg lokalt. Minifieringen sker bara i deployen, så källfilerna får ha kommentarer.
 - Styling i `styles.css`, logik i `script.js`. Undvik inline CSS och script i index.html om det inte finns en stark anledning.
 - Typsnitt är självhostade som woff2 i `fonts/`, bara latin-delen och bara de vikter som används. Inga länkar till Google Fonts.
-- Inga tredjepartsskript i koden. Statistik sköts av Cloudflare Web Analytics (se Deploy), utan kakor.
+- Inga tredjepartsskript i koden, utom Cloudflare Web Analytics på botabra.se och seanhak.com (se Deploy). Statistiken är utan kakor.
 - Varje sajt har en `404.html` i sin egen stil, med `noindex`, en länk till startsidan och `<base href="/">` direkt efter viewport-taggen. Sidan visas på vilken okänd adress som helst, även djupa som `/a/b/c`, och base gör att alla relativa adresser (CSS, typsnitt, bilder, JS) utgår från roten.
 - Varje sajt har `site.webmanifest`, `robots.txt`, `sitemap.xml`, `llms.txt`, `humans.txt` och `.well-known/security.txt`. Datum och `Expires` i dem är platshållare som stämplas vid deploy.
 - Adresser i meta-taggar, sitemap och liknande är absoluta och använder sajtens kanoniska värd (apex, eller www för IDN-domänerna, se nedan).
@@ -45,5 +45,5 @@ Varje sajts `.github/workflows/deploy.yml` körs vid push till `main` och via `w
 - Stämplas: `lastmod` och humans.txt-datum (senaste commit), `Expires` i security.txt (ett år fram), eventuellt ©-år, och `?v=<commit>` på script.js i alla HTML-sidor i roten (index.html, 404.html).
 - styles.css bäddas in i alla HTML-sidor i roten, och deployen stoppas om någon sida ändå pekar på styles.css (länken måste skrivas `<link rel="stylesheet" href="styles.css">`, med eller utan `/`). Minifiering med esbuild och html-minifier-terser, alla kommentarer tas bort. Förlustfri bildoptimering med svgo, optipng och jpegoptim.
 - Cache-Control: HTML `no-cache`, JS och woff2 ett år `immutable`, txt en timme, övrigt en dag. JS och typsnitt laddas upp först och HTML sist, så att en ny `?v=` aldrig kan peka på en gammal script.js. Filer som inte längre finns tas bort sist. Sedan töms Cloudflares cache.
-- Web Analytics (Cloudflare, automatisk installation, full läge) är påslaget för alla sajter. Beacon läggs in vid kanten och syns inte i repona. Varje sajt nämner det i humans.txt, och seanhak.com och botabra.se även i sidfoten.
+- Web Analytics (Cloudflare, full läge) är påslaget för alla sajter. De små sajterna har automatisk installation: beacon läggs in vid kanten och syns inte i repona. botabra.se och seanhak.com har manuell installation: script.js lägger in beacon först efter `load` när webbläsaren är ledig, så att den inte konkurrerar med sidans egna filer (Lighthouse). Den gör ingenting om beacon redan finns, så att inget räknas dubbelt. Varje sajt nämner det i humans.txt, och seanhak.com och botabra.se även i sidfoten.
 - En ändring i static-site-deploy når sajterna först när taggen `v1` flyttas och sajten deployas igen.
