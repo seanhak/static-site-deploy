@@ -34,7 +34,7 @@ jobs:
     uses: seanhak/static-site-deploy/.github/workflows/deploy.yml@v1
     with:
       bucket: example.com
-      # copyright-name: Bota bra          # stämplar "© <år> Bota bra" i index.html
+      # copyright-name: Bota bra          # stämplar "© <år> Bota bra" i index.html och 404.html
       # humans-date-label: Last updated   # om humans.txt är på engelska
     secrets: inherit
 ```

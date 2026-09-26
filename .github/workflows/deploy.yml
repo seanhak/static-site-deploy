@@ -83,13 +83,17 @@ jobs:
           [ -f dist/sitemap.xml ] && sed -i -E "s#<lastmod>[^<]*</lastmod>#<lastmod>$LASTMOD</lastmod>#" dist/sitemap.xml
           [ -f dist/humans.txt ] && sed -i -E "s#^$HUMANS_LABEL: .*#$HUMANS_LABEL: $LASTMOD#" dist/humans.txt
           [ -f dist/.well-known/security.txt ] && sed -i -E "s#^Expires: .*#Expires: $EXPIRES#" dist/.well-known/security.txt
-          if [ -n "$COPYRIGHT_NAME" ]; then
-            sed -i -E "s#© [0-9]{4} $COPYRIGHT_NAME#© $YEAR $COPYRIGHT_NAME#" dist/index.html
-          fi
-          # cache-busting: nya adresser till CSS och JS vid varje deploy
-          sed -i -E "s#href=\"styles\.css\"#href=\"styles.css?v=$VERSION\"#; s#src=\"script\.js\"#src=\"script.js?v=$VERSION\"#" dist/index.html
+          # alla sidor i roten (index.html, 404.html …); 404-sidan länkar med rotadresser (/styles.css)
+          for f in dist/*.html; do
+            [ -f "$f" ] || continue
+            if [ -n "$COPYRIGHT_NAME" ]; then
+              sed -i -E "s#© [0-9]{4} $COPYRIGHT_NAME#© $YEAR $COPYRIGHT_NAME#" "$f"
+            fi
+            # cache-busting: nya adresser till CSS och JS vid varje deploy
+            sed -i -E "s#href=\"(/?)styles\.css\"#href=\"\1styles.css?v=$VERSION\"#; s#src=\"(/?)script\.js\"#src=\"\1script.js?v=$VERSION\"#" "$f"
+            grep -o -E "© [0-9]{4} [^<]*|(styles\.css|script\.js)\?v=[0-9a-f]+" "$f" | sed "s#^#$f: #" || true
+          done
           grep -h -E "lastmod|$HUMANS_LABEL|Expires" dist/sitemap.xml dist/humans.txt dist/.well-known/security.txt 2>/dev/null || true
-          grep -o -E "© [0-9]{4} [^<]*|(styles\.css|script\.js)\?v=[0-9a-f]+" dist/index.html || true
 
       # Minifieringen tar även bort alla kommentarer
       - name: Minify
@@ -97,13 +101,20 @@ jobs:
           shopt -s nullglob
           files=(dist/*.js dist/*.css)
           [ ${#files[@]} -gt 0 ] && npx --yes esbuild@0.28.2 "${files[@]}" --minify --outdir=dist --allow-overwrite
-          # CSS:en är liten: bädda in den i HTML:en så att sidan slipper vänta på en extra förfrågan
+          # CSS:en är liten: bädda in den i HTML:en så att sidan slipper vänta på en extra förfrågan.
+          # Relativa url() i CSS:en (typsnitt, bilder) blir rotadresser, eftersom de annars skulle tolkas
+          # relativt sidans adress, och 404-sidan kan visas på vilken djup adress som helst.
           if [ -f dist/styles.css ]; then
             node -e "
-              const fs=require('fs'), css=fs.readFileSync('dist/styles.css','utf8'), f='dist/index.html';
-              const html=fs.readFileSync(f,'utf8'), out=html.replace(/<link rel=\"stylesheet\" href=\"styles\.css[^\"]*\">/, ()=>'<style>'+css+'</style>');
-              if(out===html) throw new Error('hittade inte styles.css-länken');
-              fs.writeFileSync(f,out); fs.unlinkSync('dist/styles.css');"
+              const fs=require('fs'), path=require('path');
+              const css=fs.readFileSync('dist/styles.css','utf8').replace(/url\(\s*(['\"]?)(?![a-z]+:|\/|#)([^'\")]+)\1\s*\)/gi, (m,q,u)=>'url('+q+'/'+u+q+')');
+              for (const name of fs.readdirSync('dist').filter(n=>n.endsWith('.html'))) {
+                const f=path.join('dist',name), html=fs.readFileSync(f,'utf8');
+                const out=html.replace(/<link rel=\"stylesheet\" href=\"\/?styles\.css[^\"]*\">/, ()=>'<style>'+css+'</style>');
+                if(out===html && name==='index.html') throw new Error('hittade inte styles.css-länken i index.html');
+                if(out!==html){ fs.writeFileSync(f,out); console.log('inbäddad i '+f); }
+              }
+              fs.unlinkSync('dist/styles.css');"
           fi
           find dist -name '*.html' -exec npx --yes html-minifier-terser@7.2.0 \
             --collapse-whitespace --conservative-collapse --remove-comments -o {} {} \;
