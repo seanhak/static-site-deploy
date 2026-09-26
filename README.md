@@ -47,10 +47,11 @@ OIDC-inloggningen gäller det anropande repot, så varje sajts roll litar bara p
 
 1. Kopierar bara sajtens filtyper till `dist/` (vitlista). `.md`, dotmappar och verktyg publiceras aldrig, utom `.well-known/`.
 2. Stämplar `lastmod` i sitemap.xml, datumet i humans.txt, `Expires` i security.txt, eventuellt ©-år, och `?v=<commit>` på script.js i alla HTML-sidor i roten (styles.css bäddas in och behöver ingen).
-3. Minifierar JS/CSS (esbuild) och HTML (html-minifier-terser), och bäddar in styles.css i alla HTML-sidor i roten. Deployen stoppas om någon sida ändå pekar på styles.css.
-4. Optimerar bilder förlustfritt: svgo, optipng och jpegoptim. Varje verktyg körs bara om det finns filer av den typen.
-5. Laddar upp till S3 med Cache-Control per filtyp: HTML `no-cache`, JS och woff2 ett år `immutable`, txt en timme, övrigt en dag. JS och typsnitt först, HTML sist och borttagningar allra sist.
-6. Tömmer Cloudflares cache.
+3. Bantar typsnitten (fonttools) till de tecken som syns på sajten och versionerar dem med `?v=<hash>`.
+4. Minifierar JS/CSS (esbuild) och HTML (html-minifier-terser), och bäddar in styles.css i alla HTML-sidor i roten. Deployen stoppas om någon sida ändå pekar på styles.css.
+5. Optimerar bilder förlustfritt: svgo, optipng och jpegoptim. Varje verktyg körs bara om det finns filer av den typen.
+6. Laddar upp till S3 med Cache-Control per filtyp: HTML `no-cache`, JS och woff2 ett år `immutable`, txt en timme, övrigt en dag. JS och typsnitt först, HTML sist och borttagningar allra sist.
+7. Tömmer Cloudflares cache.
 
 ## Uppdatera
 

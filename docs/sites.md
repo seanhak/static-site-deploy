@@ -5,7 +5,7 @@ Gäller alla sajter i `README.md`:s tabell (botabra.se, seanhak.com, hemlisar.co
 ## Kod
 - Ren HTML, CSS och JavaScript, utan ramverk och utan build-steg lokalt. Minifieringen sker bara i deployen, så källfilerna får ha kommentarer.
 - Styling i `styles.css`, logik i `script.js`. Undvik inline CSS och script i index.html om det inte finns en stark anledning.
-- Typsnitt är självhostade som woff2 i `fonts/`, bara latin-delen och bara de vikter som används. Inga länkar till Google Fonts.
+- Typsnitt är självhostade som woff2 i `fonts/`, bara latin-delen och bara de vikter som används. Inga länkar till Google Fonts. Vid deploy bantas de dessutom till de tecken som faktiskt syns på sajten (text i HTML/SVG, visade attribut och data-*, CSS `content:`, siffror, båda skiftlägen) och får `?v=<hash>`. Originalen i repot rörs inte. Text som bara finns i JavaScript kommer inte med, så lägg sådan text i HTML:en, till exempel i ett data-attribut.
 - Inga tredjepartsskript i koden, utom Cloudflare Web Analytics på botabra.se och seanhak.com (se Deploy). Statistiken är utan kakor.
 - Varje sajt har en `404.html` i sin egen stil, med `noindex`, en länk till startsidan och `<base href="/">` direkt efter viewport-taggen. Sidan visas på vilken okänd adress som helst, även djupa som `/a/b/c`, och base gör att alla relativa adresser (CSS, typsnitt, bilder, JS) utgår från roten.
 - Varje sajt har `site.webmanifest`, `robots.txt`, `sitemap.xml`, `llms.txt`, `humans.txt` och `.well-known/security.txt`. Datum och `Expires` i dem är platshållare som stämplas vid deploy.

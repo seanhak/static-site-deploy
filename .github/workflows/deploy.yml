@@ -101,6 +101,74 @@ jobs:
           grep -o -E "© [0-9]{4} [^<]*|script\.js\?v=[0-9a-f]+" dist/*.html || true
           grep -h -E "lastmod|$HUMANS_LABEL|Expires" dist/sitemap.xml dist/humans.txt dist/.well-known/security.txt 2>/dev/null || true
 
+      # Typsnitten bantas till de tecken som faktiskt syns på sajten: text i HTML och SVG (utom script/style),
+      # attribut som kan visas (alt, title, placeholder, value, data-*) och CSS content:, plus siffror och
+      # både versal och gemen av varje bokstav (text-transform). Körs efter stämplingen, så att årtalet kommer
+      # med. Referenserna får ?v=<hash>, så att en ny delmängd aldrig fastnar i ettårscachen för woff2.
+      # Text som bara finns i JavaScript kommer inte med; lägg den i HTML:en (t.ex. ett data-attribut).
+      - name: Subset fonts
+        run: |
+          if ! find dist -name '*.woff2' | grep -q .; then echo "Inga typsnitt"; exit 0; fi
+          python3 -m venv /tmp/fonttools
+          /tmp/fonttools/bin/pip install --quiet --disable-pip-version-check fonttools==4.55.0 brotli==1.1.0
+          /tmp/fonttools/bin/python - <<'PY'
+          import hashlib, html.parser, logging, os, re
+          from fontTools import subset
+
+          logging.getLogger('fontTools').setLevel(logging.ERROR)
+          SHOWN_ATTRS = {'alt', 'title', 'placeholder', 'value'}   # attribut som kan visas som text (plus data-*)
+
+          class Text(html.parser.HTMLParser):
+              def __init__(self):
+                  super().__init__(convert_charrefs=True)
+                  self.chars, self.skip = set(), 0
+              def handle_starttag(self, tag, attrs):
+                  if tag in ('script', 'style'):
+                      self.skip += 1
+                  for k, v in attrs:
+                      if v and (k in SHOWN_ATTRS or k.startswith('data-')):
+                          self.chars.update(v)
+              def handle_endtag(self, tag):
+                  if tag in ('script', 'style') and self.skip:
+                      self.skip -= 1
+              def handle_data(self, data):
+                  if not self.skip:
+                      self.chars.update(data)
+
+          def files(*exts):
+              return sorted(os.path.join(d, n) for d, _, ns in os.walk('dist') for n in ns if n.endswith(exts))
+
+          chars = set('0123456789 ')
+          for f in files('.html', '.svg'):
+              p = Text(); p.feed(open(f, encoding='utf-8').read()); chars |= p.chars
+          for f in files('.html', '.css'):
+              for _, t in re.findall(r'content\s*:\s*(["\'])(.*?)\1', open(f, encoding='utf-8').read()):
+                  chars.update(t)
+          chars |= {c.upper() for c in chars} | {c.lower() for c in chars}   # text-transform kan byta skiftläge
+          text = ''.join(sorted(c for c in chars if c.isprintable() or c == ' '))
+          print(f'{len(text)} tecken: {text}')
+
+          opts = subset.Options()
+          opts.flavor = 'woff2'
+          opts.layout_features = ['*']   # kerning, ligaturer och övriga OpenType-funktioner följer med
+          opts.name_IDs = ['*']          # namn- och licensfälten följer med
+          opts.notdef_outline = True
+          for f in files('.woff2'):
+              before = os.path.getsize(f)
+              font = subset.load_font(f, opts)
+              s = subset.Subsetter(opts); s.populate(text=text); s.subset(font)
+              subset.save_font(font, f, opts)
+              v = hashlib.sha256(open(f, 'rb').read()).hexdigest()[:10]
+              rel = os.path.relpath(f, 'dist').replace(os.sep, '/')
+              pat = re.compile(r'(/?' + re.escape(rel) + r')(?![?\w])')
+              for g in files('.html', '.css'):
+                  src = open(g, encoding='utf-8').read()
+                  out = pat.sub(lambda m: m.group(1) + '?v=' + v, src)
+                  if out != src:
+                      open(g, 'w', encoding='utf-8').write(out)
+              print(f'{rel}: {before/1024:.1f} → {os.path.getsize(f)/1024:.1f} KiB (?v={v})')
+          PY
+
       # Minifieringen tar även bort alla kommentarer
       - name: Minify
         run: |
