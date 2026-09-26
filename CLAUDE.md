@@ -2,6 +2,8 @@
 
 Delad GitHub Actions-workflow (`workflow_call`) och hjälpskript för Seans statiska sajter i S3 bakom Cloudflare. Se README.md för sajtlista, användning och vad workflowen gör.
 
+`docs/sites.md` beskriver det som är gemensamt för alla sajterna. Den importeras av `/Volumes/SD/git/seanhak/CLAUDE.md` och gäller alltså i varje sajtrepo. Håll den uppdaterad när workflowen eller uppsättningen ändras.
+
 ## Noteringar
 - Sajterna anropar `@v1`. En ändring här når dem först när `v1` flyttas och sajten deployas igen. Ändringar som inte är bakåtkompatibla blir `v2`.
 - Workflowen måste tåla sajter som saknar vissa filer (script.js, SVG, bilder, manifest, humans.txt …). Lägg ett skydd runt varje steg som förutsätter en filtyp.
